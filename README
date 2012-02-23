@@ -1,0 +1,141 @@
+2/23/2012
+Working with gpuLucas
+
+The code has only been tested under x64 compilation on GTX 480 and Tesla c2050
+GPU, under Windows 7 using Visual C++ in Visual Studio 2008.  Tested under
+CUDA 3.2, 4.0, and 4.1.
+
+I've included the VC project files; the code was running in the CUDA SDK
+directory
+
+C:\ProgramData\NVIDIA Corporation\NVIDIA GPU Computing SDK 4.1\C\src\gpuLucas
+
+and writing the executable with the other CUDA demo executables.  It's
+an ugly and fragile vc90 build-project and you're advised to make your own.)
+
+It currently uses QD to compute the irrational-base convolution weights
+in extended precision, to avoid catastrophic cancellation for non-power-of-2
+signal-sizes.  See below for address to download qd.
+
+It uses CUFFT for non-power-of-two transforms, and cutil for timing and runtime
+error checking.
+
+The standard disclaimers apply (BSD license, that sort of thing, see below).
+Strictly research code, with no guarantees of any sort.
+
+I've included a subdirectory with some CUFFT convolution sizes and associated
+timings, for GTX 480 and TESLA c2050, for size = 2**a * 3**b * 5**c * 7**d.
+Stored as .py files so can be read in directly as python lists with no parsing.
+
+(The python scripts won't work with any current code, but they're there.)
+
+Good luck making sense of it.  I'm waiting on another order-of-magnitude
+speedup in the hardware before I look at Lucas-Lehmer again, but I'm happy
+to incorporate minor changes or see ideas swiped for GIMPS or other group
+efforts.
+
+Andrew Thall
+Alma College
+Winter 2012
+
+--
+
+The below documentation is taken from the gpuLucas.cu header-explanations.
+
+* The gpuLucas project implements the IBDWT method of Crandall in CUDA.
+* This uses a variable base representation and a weighted tranformation
+* to reduce the FFT length and eliminate the modular reduction mod M_p.
+*
+* gpuLucas uses carry-save arithmetic to eliminate carry-adds beyond a single
+*   ripple-carry from each digit to the next, following the radix-restoration
+*   (dicing) of the convolution products.
+*
+* The radix-restoration code in IrrBaseBalanced.cu is an ugly kludge,
+*   slightly better with templating (thanks, Alex), but it makes up only 1/6th
+*   of the runtime, the rest being the weighted transform and componentwise
+*   complex multiplication, so might pretty it up, great, but it won't run
+*   much faster overall.
+
+* Tested:  GTX480 and Tesla C2050, Cuda versions 3.2, 4.0, 4.1
+* Compiled under 64-bit Windows 7, with Visual Studio 2008, x64.
+*   Uses 64-bit (long long int) and will probably not work in 32-bit x86.
+*
+* Files:
+*    gpuLucas.cu -- main file, including main() and mersenneTest() functions
+*    IrrBaseBalanced.cu -- include file (i.e., header, not separate compilation)
+*        with the radix-restoration code llintToBalInt<n>() templated routines.
+*
+* Dependencies:
+*    CUFFT
+*    cutil library
+*    QD extended-precision library for dd_real, double-double class
+*        (Computed weights for IBDWT for non-power-of-two FFTs
+*         suffered catastrophic cancellation in double.)
+*         QD at http://crd-legacy.lbl.gov/~dhbailey/mpdist/
+*
+* FOR USE:
+*    AT COMPILE TIME:
+*       1) Set testPrime and signalSize in main()
+*                        
+*       2) Set setSliceAndDice(x) function in main() to carry high-order bits
+*          from x preceeding convolution product digits.  With convolution wordsize
+*          typically (18, 19) bits, two preceding terms are typically needed.
+*          For shorter wordsizes, a product may need product bits from up to six
+*          lower-order words.  setSliceAndDice() assigns a pointer-to-function
+*          to a templated function for the chosen number of terms.
+*
+*    All of this should be altered to be set automatically at runtime based on
+*    input testvalue. Most global compile-time dependencies have in fact been
+*    eliminated.
+*
+* Key routines:
+*    main() -- sets up the constants for the GPU
+*              calls errorTest(testPrime, signalSize), outputs timing and error data
+*              calls mersenneTest(testPrime, signalSize) to do full test
+*    errorTest(int testPrime, int signalSize)
+*    mersenneTest(int testPrime, int signalSize)
+*
+* Implementing balanced-integers in the irrational base
+*
+* In bitsPerWord, we use a bit-vector:
+*    0 -- low base word
+*    1 -- high base word
+* Where the positions 0=current, 1=previous, 2=previousprevious, etc.
+*    The h_BASE_HI, h_BASE_LO, h_HI_BITS, h_LO_BITS are global constants
+* on the host, and BASE_HI, BASE_LO, HI_BITS, LO_BITS, etc., on the device.
+* 
+* Since minimum word-sizes are (8, 9) in our ranges, never need carry-out bits
+* from more than the six preceding terms for a product term, usually, no more than
+* two or three with wds of length (18, 19) typical.
+*
+* NOTE:  must use extended precision to compute A and Ainv for non-power-of-two FFT runlengths
+*    We do this on the host using qd library.
+*
+****************************************************************************
+*
+* Copyright (c) 2010-2012, Andrew Thall, Alma College
+* All rights reserved.
+*
+* Redistribution and use in source and binary forms, with or without
+* modification, are permitted provided that the following conditions are met:
+*     * Redistributions of source code must retain the above copyright
+*       notice, this list of conditions and the following disclaimer.
+*     * Redistributions in binary form must reproduce the above copyright
+*       notice, this list of conditions and the following disclaimer in the
+*       documentation and/or other materials provided with the distribution.
+*     * Neither the names of Andrew Thall or Alma College, nor the
+*       names of its contributors may be used to endorse or promote products
+*       derived from this software without specific prior written permission.
+*
+* THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+* ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+* WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+* DISCLAIMED. IN NO EVENT SHALL ANDREW THALL OR ALMA COLLEGE BE LIABLE FOR ANY
+* DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+* (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+* LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+* ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+* (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*
+******************************************************************************
