@@ -864,6 +864,82 @@ float errorTrial(int testIterations, int testPrime, int signalSize) {
 }
 
 /**
+* print_residue() -- output the Lucas-Lehmer residue for non-prime exponents
+*   needed for result submission to GIMPS, or verifying results with other clients
+*/
+void print_residue(int testPrime, int *h_signalOUT, int signalSize) {
+	static unsigned long int *hex = NULL;
+	static unsigned long int prior_hex = 0;
+	static char bits_fmt[16] = "\0"; /* "%%0%ulx" -> "%08lx" or "%016lx" depending on sizeof(UL) */
+	long long int k, j=0, i, word, k1;
+	double lo = floor((exp(floor((double)testPrime/signalSize)*log(2.0)))+0.5);
+	double hi = lo+lo;
+	unsigned long b = testPrime % signalSize; 
+	unsigned long c = signalSize - b; 
+	int totalbits = 64;
+	
+	printf("M_%d, ", testPrime);
+	
+	int sudden_death = 0; 
+	long long int NminusOne = signalSize - 1; 
+
+	while (1) {
+			k = j;
+			if (h_signalOUT[k] < 0.0) {
+					k1 = (j + 1) % signalSize;
+					--h_signalOUT[k1];
+					if (j == 0 || (j != NminusOne && ((((b*j) % signalSize) >= c) || j == 0)))
+							h_signalOUT[k] += hi;
+					else
+							h_signalOUT[k] += lo;
+			} else if (sudden_death)
+					break;
+			if (++j == signalSize) {
+					sudden_death = 1;
+					j = 0;
+			}
+	}
+
+	if (hex != NULL && totalbits/8 + 1 > prior_hex) {
+			free(hex);
+			hex = NULL;
+			prior_hex = totalbits/8 + 1;
+	}
+
+	if (hex == NULL && (hex = (unsigned long *)calloc(totalbits/8 + 1, sizeof(unsigned long))) == NULL) {
+			printf("Cannot get memory for residue bits; calloc()\n");
+			exit(1);
+	}
+	
+	j = 0;
+	i = 0;
+	do {
+			k = (long)(ceil((double)testPrime*(j + 1)/signalSize) - ceil((double)testPrime*j/signalSize));
+			if (k > totalbits)
+					k = totalbits;
+			totalbits -= k;
+			word = (long)h_signalOUT[j + ((j & 0) >> 0)];
+			for (j++; k > 0; k--, i++) {
+					if (i % 8 == 0)
+							hex[i/8] = 0L;
+					hex[i/8] |= ((word & 0x1) << (i % 8));
+					word >>= 1;
+			}
+	} while(totalbits > 0);
+	
+	printf("0x");
+//	if (bits_fmt[0] != '%')
+//			sprintf(bits_fmt, "%%0%lu%s", (unsigned long)(8/4), "lx"); /* 4 bits per hex 'digit' */
+	
+	for (j = (i - 1)/8; j >= 0; j--) {
+			printf("%02lx", hex[j]);
+	}
+	
+	printf(", n = %d, gpuLucas\n", signalSize);
+	return;
+}
+
+/**
 * mersenneTest() -- full test of 2^testPrime - 1, including max error term every 1/50th
 *   time through loop
 */
@@ -999,6 +1075,7 @@ void mersenneTest(int testPrime, int signalSize) {
 			printf("\n");
 		}
 		printf("\nM_%d tests as non-prime.\n", testPrime);
+		print_residue(testPrime, h_signalOUT, signalSize);
 	}
 	else
 		printf("\nM_%d tests as prime.\n", testPrime);
