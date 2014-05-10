@@ -21,7 +21,7 @@
 *
 ****************************************************************************
 *
-* Copyright (c) 2010-2012, Andrew Thall, Alma College
+* Copyright (c) 2010-2014, Andrew Thall, Alma College
 * All rights reserved.
 *
 * Redistribution and use in source and binary forms, with or without
